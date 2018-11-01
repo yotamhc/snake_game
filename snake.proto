@@ -70,10 +70,6 @@ message Events {
     optional string signature = 2;
 }
 
-message Ack {
-    optional bool success = 1;
-}
-
 message ClientInfo {
     required string name = 1;
 }
@@ -86,8 +82,4 @@ service SnakeServer {
     rpc JoinGame(ClientInfo) returns (Events) {}
     rpc KeyPress(KeyPressEvent) returns (Events) {}
     rpc Poll(PollRequest) returns (Events) {}
-}
-
-service SnakeClient {
-    rpc EventHandler(Events) returns (Ack) {}
 }

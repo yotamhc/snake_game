@@ -20,7 +20,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='snake',
   syntax='proto2',
   serialized_options=None,
-  serialized_pb=_b('\n\x0bsnake.proto\x12\x05snake\"\x1b\n\x03Pos\x12\t\n\x01x\x18\x01 \x02(\r\x12\t\n\x01y\x18\x02 \x02(\r\";\n\rKeyPressEvent\x12\x11\n\tsignature\x18\x01 \x02(\t\x12\x17\n\x03key\x18\x02 \x02(\x0e\x32\n.snake.Key\"N\n\x1aPlayerDirectionChangeEvent\x12\x11\n\tplayer_id\x18\x01 \x02(\r\x12\x1d\n\tdirection\x18\x02 \x02(\x0e\x32\n.snake.Key\"7\n\x17\x46oodPositionChangeEvent\x12\x1c\n\x08\x66ood_pos\x18\x01 \x02(\x0b\x32\n.snake.Pos\":\n\x16PlayerScoreChangeEvent\x12\x11\n\tplayer_id\x18\x01 \x02(\r\x12\r\n\x05score\x18\x02 \x02(\r\"k\n\x15PlayerDimensionsEvent\x12\x11\n\tplayer_id\x18\x01 \x02(\r\x12\x1e\n\nplayer_pos\x18\x02 \x02(\x0b\x32\n.snake.Pos\x12\x1f\n\x0bplayer_body\x18\x03 \x03(\x0b\x32\n.snake.Pos\"\xa6\x01\n\x11PlayerJoinedEvent\x12\x11\n\tplayer_id\x18\x01 \x02(\r\x12\x1e\n\nplayer_pos\x18\x02 \x02(\x0b\x32\n.snake.Pos\x12\x1f\n\x0bplayer_body\x18\x03 \x03(\x0b\x32\n.snake.Pos\x12\x1d\n\tdirection\x18\x04 \x02(\x0e\x32\n.snake.Key\x12\r\n\x05score\x18\x05 \x02(\r\x12\x0f\n\x07my_join\x18\x06 \x02(\x08\"*\n\x15PlayerTerminatedEvent\x12\x11\n\tplayer_id\x18\x01 \x02(\r\"\xaa\x03\n\x05\x45vent\x12)\n\tkey_press\x18\x01 \x01(\x0b\x32\x14.snake.KeyPressEventH\x00\x12\x44\n\x17player_direction_change\x18\x02 \x01(\x0b\x32!.snake.PlayerDirectionChangeEventH\x00\x12>\n\x14\x66ood_position_change\x18\x03 \x01(\x0b\x32\x1e.snake.FoodPositionChangeEventH\x00\x12<\n\x13player_score_change\x18\x04 \x01(\x0b\x32\x1d.snake.PlayerScoreChangeEventH\x00\x12\x39\n\x11player_dimensions\x18\x05 \x01(\x0b\x32\x1c.snake.PlayerDimensionsEventH\x00\x12\x31\n\rplayer_joined\x18\x06 \x01(\x0b\x32\x18.snake.PlayerJoinedEventH\x00\x12\x39\n\x11player_terminated\x18\x07 \x01(\x0b\x32\x1c.snake.PlayerTerminatedEventH\x00\x42\t\n\x07\x65vt_msg\"9\n\x06\x45vents\x12\x1c\n\x06\x65vents\x18\x01 \x03(\x0b\x32\x0c.snake.Event\x12\x11\n\tsignature\x18\x02 \x01(\t\"\x16\n\x03\x41\x63k\x12\x0f\n\x07success\x18\x01 \x01(\x08\"\x1a\n\nClientInfo\x12\x0c\n\x04name\x18\x01 \x02(\t\" \n\x0bPollRequest\x12\x11\n\tsignature\x18\x01 \x02(\t*6\n\x03Key\x12\x08\n\x04LEFT\x10\x00\x12\t\n\x05RIGHT\x10\x01\x12\x06\n\x02UP\x10\x02\x12\x08\n\x04\x44OWN\x10\x03\x12\x08\n\x04QUIT\x10\x04\x32\x9d\x01\n\x0bSnakeServer\x12.\n\x08JoinGame\x12\x11.snake.ClientInfo\x1a\r.snake.Events\"\x00\x12\x31\n\x08KeyPress\x12\x14.snake.KeyPressEvent\x1a\r.snake.Events\"\x00\x12+\n\x04Poll\x12\x12.snake.PollRequest\x1a\r.snake.Events\"\x00\x32:\n\x0bSnakeClient\x12+\n\x0c\x45ventHandler\x12\r.snake.Events\x1a\n.snake.Ack\"\x00')
+  serialized_pb=_b('\n\x0bsnake.proto\x12\x05snake\"\x1b\n\x03Pos\x12\t\n\x01x\x18\x01 \x02(\r\x12\t\n\x01y\x18\x02 \x02(\r\";\n\rKeyPressEvent\x12\x11\n\tsignature\x18\x01 \x02(\t\x12\x17\n\x03key\x18\x02 \x02(\x0e\x32\n.snake.Key\"N\n\x1aPlayerDirectionChangeEvent\x12\x11\n\tplayer_id\x18\x01 \x02(\r\x12\x1d\n\tdirection\x18\x02 \x02(\x0e\x32\n.snake.Key\"7\n\x17\x46oodPositionChangeEvent\x12\x1c\n\x08\x66ood_pos\x18\x01 \x02(\x0b\x32\n.snake.Pos\":\n\x16PlayerScoreChangeEvent\x12\x11\n\tplayer_id\x18\x01 \x02(\r\x12\r\n\x05score\x18\x02 \x02(\r\"k\n\x15PlayerDimensionsEvent\x12\x11\n\tplayer_id\x18\x01 \x02(\r\x12\x1e\n\nplayer_pos\x18\x02 \x02(\x0b\x32\n.snake.Pos\x12\x1f\n\x0bplayer_body\x18\x03 \x03(\x0b\x32\n.snake.Pos\"\xa6\x01\n\x11PlayerJoinedEvent\x12\x11\n\tplayer_id\x18\x01 \x02(\r\x12\x1e\n\nplayer_pos\x18\x02 \x02(\x0b\x32\n.snake.Pos\x12\x1f\n\x0bplayer_body\x18\x03 \x03(\x0b\x32\n.snake.Pos\x12\x1d\n\tdirection\x18\x04 \x02(\x0e\x32\n.snake.Key\x12\r\n\x05score\x18\x05 \x02(\r\x12\x0f\n\x07my_join\x18\x06 \x02(\x08\"*\n\x15PlayerTerminatedEvent\x12\x11\n\tplayer_id\x18\x01 \x02(\r\"\xaa\x03\n\x05\x45vent\x12)\n\tkey_press\x18\x01 \x01(\x0b\x32\x14.snake.KeyPressEventH\x00\x12\x44\n\x17player_direction_change\x18\x02 \x01(\x0b\x32!.snake.PlayerDirectionChangeEventH\x00\x12>\n\x14\x66ood_position_change\x18\x03 \x01(\x0b\x32\x1e.snake.FoodPositionChangeEventH\x00\x12<\n\x13player_score_change\x18\x04 \x01(\x0b\x32\x1d.snake.PlayerScoreChangeEventH\x00\x12\x39\n\x11player_dimensions\x18\x05 \x01(\x0b\x32\x1c.snake.PlayerDimensionsEventH\x00\x12\x31\n\rplayer_joined\x18\x06 \x01(\x0b\x32\x18.snake.PlayerJoinedEventH\x00\x12\x39\n\x11player_terminated\x18\x07 \x01(\x0b\x32\x1c.snake.PlayerTerminatedEventH\x00\x42\t\n\x07\x65vt_msg\"9\n\x06\x45vents\x12\x1c\n\x06\x65vents\x18\x01 \x03(\x0b\x32\x0c.snake.Event\x12\x11\n\tsignature\x18\x02 \x01(\t\"\x1a\n\nClientInfo\x12\x0c\n\x04name\x18\x01 \x02(\t\" \n\x0bPollRequest\x12\x11\n\tsignature\x18\x01 \x02(\t*6\n\x03Key\x12\x08\n\x04LEFT\x10\x00\x12\t\n\x05RIGHT\x10\x01\x12\x06\n\x02UP\x10\x02\x12\x08\n\x04\x44OWN\x10\x03\x12\x08\n\x04QUIT\x10\x04\x32\x9d\x01\n\x0bSnakeServer\x12.\n\x08JoinGame\x12\x11.snake.ClientInfo\x1a\r.snake.Events\"\x00\x12\x31\n\x08KeyPress\x12\x14.snake.KeyPressEvent\x1a\r.snake.Events\"\x00\x12+\n\x04Poll\x12\x12.snake.PollRequest\x1a\r.snake.Events\"\x00')
 )
 
 _KEY = _descriptor.EnumDescriptor(
@@ -52,8 +52,8 @@ _KEY = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=1205,
-  serialized_end=1259,
+  serialized_start=1181,
+  serialized_end=1235,
 )
 _sym_db.RegisterEnumDescriptor(_KEY)
 
@@ -505,37 +505,6 @@ _EVENTS = _descriptor.Descriptor(
 )
 
 
-_ACK = _descriptor.Descriptor(
-  name='Ack',
-  full_name='snake.Ack',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='success', full_name='snake.Ack.success', index=0,
-      number=1, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto2',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=1119,
-  serialized_end=1141,
-)
-
-
 _CLIENTINFO = _descriptor.Descriptor(
   name='ClientInfo',
   full_name='snake.ClientInfo',
@@ -562,8 +531,8 @@ _CLIENTINFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1143,
-  serialized_end=1169,
+  serialized_start=1119,
+  serialized_end=1145,
 )
 
 
@@ -593,8 +562,8 @@ _POLLREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1171,
-  serialized_end=1203,
+  serialized_start=1147,
+  serialized_end=1179,
 )
 
 _KEYPRESSEVENT.fields_by_name['key'].enum_type = _KEY
@@ -644,7 +613,6 @@ DESCRIPTOR.message_types_by_name['PlayerJoinedEvent'] = _PLAYERJOINEDEVENT
 DESCRIPTOR.message_types_by_name['PlayerTerminatedEvent'] = _PLAYERTERMINATEDEVENT
 DESCRIPTOR.message_types_by_name['Event'] = _EVENT
 DESCRIPTOR.message_types_by_name['Events'] = _EVENTS
-DESCRIPTOR.message_types_by_name['Ack'] = _ACK
 DESCRIPTOR.message_types_by_name['ClientInfo'] = _CLIENTINFO
 DESCRIPTOR.message_types_by_name['PollRequest'] = _POLLREQUEST
 DESCRIPTOR.enum_types_by_name['Key'] = _KEY
@@ -720,13 +688,6 @@ Events = _reflection.GeneratedProtocolMessageType('Events', (_message.Message,),
   ))
 _sym_db.RegisterMessage(Events)
 
-Ack = _reflection.GeneratedProtocolMessageType('Ack', (_message.Message,), dict(
-  DESCRIPTOR = _ACK,
-  __module__ = 'snake_pb2'
-  # @@protoc_insertion_point(class_scope:snake.Ack)
-  ))
-_sym_db.RegisterMessage(Ack)
-
 ClientInfo = _reflection.GeneratedProtocolMessageType('ClientInfo', (_message.Message,), dict(
   DESCRIPTOR = _CLIENTINFO,
   __module__ = 'snake_pb2'
@@ -749,8 +710,8 @@ _SNAKESERVER = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=1262,
-  serialized_end=1419,
+  serialized_start=1238,
+  serialized_end=1395,
   methods=[
   _descriptor.MethodDescriptor(
     name='JoinGame',
@@ -783,29 +744,5 @@ _SNAKESERVER = _descriptor.ServiceDescriptor(
 _sym_db.RegisterServiceDescriptor(_SNAKESERVER)
 
 DESCRIPTOR.services_by_name['SnakeServer'] = _SNAKESERVER
-
-
-_SNAKECLIENT = _descriptor.ServiceDescriptor(
-  name='SnakeClient',
-  full_name='snake.SnakeClient',
-  file=DESCRIPTOR,
-  index=1,
-  serialized_options=None,
-  serialized_start=1421,
-  serialized_end=1479,
-  methods=[
-  _descriptor.MethodDescriptor(
-    name='EventHandler',
-    full_name='snake.SnakeClient.EventHandler',
-    index=0,
-    containing_service=None,
-    input_type=_EVENTS,
-    output_type=_ACK,
-    serialized_options=None,
-  ),
-])
-_sym_db.RegisterServiceDescriptor(_SNAKECLIENT)
-
-DESCRIPTOR.services_by_name['SnakeClient'] = _SNAKECLIENT
 
 # @@protoc_insertion_point(module_scope)
