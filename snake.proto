@@ -1,0 +1,93 @@
+syntax = "proto2";
+
+package snake;
+
+enum Key {
+    LEFT = 0;
+    RIGHT = 1;
+    UP = 2;
+    DOWN = 3;
+    QUIT = 4;
+}
+
+message Pos {
+    required uint32 x = 1;
+    required uint32 y = 2;
+}
+
+message KeyPressEvent {
+    required string signature = 1;
+    required Key key = 2;
+}
+
+message PlayerDirectionChangeEvent {
+    required uint32 player_id = 1;
+    required Key direction = 2;
+}
+
+message FoodPositionChangeEvent {
+    required Pos food_pos = 1;
+}
+
+message PlayerScoreChangeEvent {
+    required uint32 player_id = 1;
+    required uint32 score = 2;
+}
+
+message PlayerDimensionsEvent {
+    required uint32 player_id = 1;
+    required Pos player_pos = 2;
+    repeated Pos player_body = 3;
+}
+
+message PlayerJoinedEvent {
+    required uint32 player_id = 1;
+    required Pos player_pos = 2;
+    repeated Pos player_body = 3;
+    required Key direction = 4;
+    required uint32 score = 5;
+    required bool my_join = 6;
+}
+
+message PlayerTerminatedEvent {
+    required uint32 player_id = 1;
+}
+
+message Event {
+    oneof evt_msg {
+        KeyPressEvent key_press = 1;
+        PlayerDirectionChangeEvent player_direction_change = 2;
+        FoodPositionChangeEvent food_position_change = 3;
+        PlayerScoreChangeEvent player_score_change = 4;
+        PlayerDimensionsEvent player_dimensions = 5;
+        PlayerJoinedEvent player_joined = 6;
+        PlayerTerminatedEvent player_terminated = 7;
+    }
+}
+
+message Events {
+    repeated Event events = 1;
+    optional string signature = 2;
+}
+
+message Ack {
+    optional bool success = 1;
+}
+
+message ClientInfo {
+    required string name = 1;
+}
+
+message PollRequest {
+    required string signature = 1;
+}
+
+service SnakeServer {
+    rpc JoinGame(ClientInfo) returns (Events) {}
+    rpc KeyPress(KeyPressEvent) returns (Events) {}
+    rpc Poll(PollRequest) returns (Events) {}
+}
+
+service SnakeClient {
+    rpc EventHandler(Events) returns (Ack) {}
+}

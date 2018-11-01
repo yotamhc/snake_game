@@ -22,8 +22,11 @@ from snake_types import *
 import pygame
 import sys
 import time
-from threading import Thread
+from threading import Timer
 import struct
+import concurrent.futures
+
+POLL_TIMEOUT = 0.1
 
 logging.basicConfig()
 _log = logging.getLogger(__name__)
@@ -52,72 +55,51 @@ KEY_DICT = {
 
 
 class SnakeClient:
-  def __init__(self, server_address):
-    self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+  def __init__(self, server_address, name='Client'):
     self.server_address = server_address
-    self.buffer = ''
     self.ui = None
     self.game = ClientGame()
+    self.stub = snake_pb2_grpc.SnakeServerStub(grpc.insecure_channel('%s:%d' % (server_address, SERVER_PORT)))
+    self.client_info = snake_pb2.ClientInfo(name=name)
+    self.signature = None
+    self.last_event_received = 0
 
-  def _recv_loop(self):
-    while True:
-      try:
-        data = self.socket.recv(1024)
-        self.buffer += data
+  def handle_received_events(self, events_message):
+    self.last_event_received = time.time()
+    if len(events_message.events) > 0:
+      _log.debug('Received %d events from server' % len(events_message.events))
+      events = [unwrap_event(evt) for evt in events_message.events]
+      for evt in events:
+        self.game.handle_server_event(evt)
+    if self.game.active:
+      Timer(POLL_TIMEOUT, function=self.poll_timer).start()
 
-        obj = None
+  def poll_server(self):
+    res = self.stub.Poll(snake_pb2.PollRequest(signature=self.signature))
+    self.handle_received_events(res)
 
-        length, = struct.unpack('!H', self.buffer[:2])
-        if len(self.buffer) >= length - 2:
-          try:
-            obj = cPickle.loads(self.buffer[2:2+length])
-            self.buffer = self.buffer[2+length:]
-          except:
-            _log.debug('Failed to unpickle incoming data. Buffer: %s' % self.buffer)
-            pass
-
-          err = False
-          if not isinstance(obj, list):
-            _log.debug('Unpickled data is not a list of events')
-            err = True
-          else:
-            for e in obj:
-              if not isinstance(e, Event):
-                _log.debug('Unpickled data is not a list of events')
-                err = True
-            if not err:
-              for e in obj:
-                if self.ui:
-                  _log.debug('Handling event: %s' % type(e))
-                  self.game.handle_server_event(e)
-        else:
-          # Keep buffering
-          _log.debug('Buffering... (buffer size: %d, next expected length: %d)' % (len(self.buffer - 2), length))
-
-      except Exception as e:
-        _log.debug('Socket is closed')
-        #_log.exception(e)
-        break
+  def poll_timer(self):
+    if time.time() - self.last_event_received > POLL_TIMEOUT:
+      self.poll_server()
 
   def start(self):
     self.ui = UiBoard(self)
     self.ui.game = self.game
-    conn = self.socket.connect(self.server_address)
-    _log.debug('Connected to server')
-    Thread(target=self._recv_loop).start()
+    events = self.stub.JoinGame(self.client_info)
+    _log.debug('Received %d initial events. Signature: %s' % (len(events.events), events.signature))
+    self.signature = events.signature
+    self.handle_received_events(events)
     self.ui.start()
 
   def term(self):
     self.game.active = False
-    data = struct.pack('!I', SIGTERM)
-    self.socket.send(data)
-    self.socket.shutdown(socket.SHUT_RDWR)
-    self.socket.close()
+    res = self.stub.KeyPress(snake_pb2.KeyPressEvent(signature=self.signature, key=SIGTERM))
+    self.handle_received_events(res)
 
   def keypress(self, key):
     _log.debug('Sending keypress: %d' % key)
-    data = struct.pack('!I', key)
-    self.socket.send(data)
+    res = self.stub.KeyPress(snake_pb2.KeyPressEvent(signature=self.signature, key=key))
+    self.handle_received_events(res)
 
 
 class ClientPlayer(Player):
@@ -139,25 +121,26 @@ class ClientGame:
   def handle_server_event(self, event):
     _log.debug('Received event of type %s' % (type(event)))
 
-    if isinstance(event, PlayerJoinedEvent):
-      self.players[event.player_id] = ClientPlayer(event.player_id, event.player_pos, event.player_body, event.direction, event.score)
+    if isinstance(event, snake_pb2.PlayerJoinedEvent):
+      self.players[event.player_id] = ClientPlayer(event.player_id, from_proto_pos(event.player_pos),
+                                                   from_proto_pos(event.player_body), event.direction, event.score)
       self.recently_set.add(event.player_id)
       if event.my_join:
         self.player_id = event.player_id
-    elif isinstance(event, FoodPositionChangeEvent):
-        self.food_pos = event.food_pos
+    elif isinstance(event, snake_pb2.FoodPositionChangeEvent):
+        self.food_pos = from_proto_pos(event.food_pos)
     elif event.player_id not in self.players:
       _log.debug('No such player (yet?): %d' % event.player_id)
       return
-    elif isinstance(event, PlayerDirectionChangeEvent):
+    elif isinstance(event, snake_pb2.PlayerDirectionChangeEvent):
       self.players[event.player_id].direction = event.direction
-    elif isinstance(event, PlayerScoreChangeEvent):
+    elif isinstance(event, snake_pb2.PlayerScoreChangeEvent):
       self.players[event.player_id].score = event.score
-    elif isinstance(event, PlayerDimensionsEvent):
-      self.players[event.player_id].snake_head = event.player_pos
-      self.players[event.player_id].snake_body = event.player_body
+    elif isinstance(event, snake_pb2.PlayerDimensionsEvent):
+      self.players[event.player_id].snake_head = from_proto_pos(event.player_pos)
+      self.players[event.player_id].snake_body = from_proto_pos(event.player_body)
       self.recently_set.add(event.player_id)
-    elif isinstance(event, PlayerTerminatedEvent):
+    elif isinstance(event, snake_pb2.PlayerTerminatedEvent):
       del self.players[event.player_id]
       if event.player_id == self.player_id:
         self.active = False
@@ -204,6 +187,7 @@ class UiBoard:
 
   def uiloop(self):
     t = 0
+    terminated = False
     while True:
       if self.game is not None and self.game.active:
         for event in pygame.event.get():
@@ -215,18 +199,24 @@ class UiBoard:
 
             elif event.key == pygame.K_ESCAPE:
               self.client.term()
-              pygame.event.post(pygame.event.Event(pygame.QUIT))
+              pygame.event.post(pygame.event.Event(pygame.QUIT, dict={}))
+              terminated = True
+
+        if terminated:
+          continue
 
         if AUTO_MODE and self.game.player_id is not None:
-          player = self.game.players[self.game.player_id]
+          player = self.game.players.get(self.game.player_id)
+          if player is None:
+            continue
           key = -1
-          if player.direction == RIGHT and player.snake_head[0] == self.game.food_pos[0] - (2*POINT_SIZE):
+          if player.direction == RIGHT and player.snake_head[0] == self.game.food_pos[0] - (POINT_SIZE):
             key = DOWN if player.snake_head[1] < self.game.food_pos[1] else UP
-          elif player.direction == LEFT and player.snake_head[0] == self.game.food_pos[0] + (2*POINT_SIZE):
+          elif player.direction == LEFT and player.snake_head[0] == self.game.food_pos[0] + (POINT_SIZE):
             key = DOWN if player.snake_head[1] < self.game.food_pos[1] else UP
-          elif player.direction == UP and player.snake_head[1] == self.game.food_pos[1] + (2*POINT_SIZE):
+          elif player.direction == UP and player.snake_head[1] == self.game.food_pos[1] + (POINT_SIZE):
             key = LEFT if player.snake_head[0] > self.game.food_pos[0] else RIGHT
-          elif player.direction == DOWN and player.snake_head[1] == self.game.food_pos[1] - (2*POINT_SIZE):
+          elif player.direction == DOWN and player.snake_head[1] == self.game.food_pos[1] - (POINT_SIZE):
             key = LEFT if player.snake_head[0] > self.game.food_pos[0] else RIGHT
           elif player.direction == RIGHT and player.snake_head[0] >= self.width - 50:
             key = DOWN
@@ -299,6 +289,7 @@ if __name__ == '__main__':
       sys.exit(0)
 
   server_ip = '127.0.0.1'
+  self_ip = '127.0.0.1'
   if len(sys.argv) > 1 and sys.argv[1] == 'AUTO':
     AUTO_MODE = True
     if len(sys.argv) > 2:
@@ -306,5 +297,5 @@ if __name__ == '__main__':
   elif len(sys.argv) > 1:
     server_ip = sys.argv[1]
 
-  client = SnakeClient((server_ip, SERVER_PORT))
+  client = SnakeClient(self_ip, server_ip)
   client.start()

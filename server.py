@@ -26,6 +26,8 @@ import os
 import sys
 import time
 import pygame
+import hashlib
+import concurrent.futures
 
 logging.basicConfig()
 _log = logging.getLogger(__name__)
@@ -36,17 +38,44 @@ USAGE = 'Usage: python server.py [SHOW]\n\t' \
         '--help: shows this message (and quits)\n'
 
 
-class SnakeServer:
-  def __init__(self, port=SERVER_PORT, show_ui=False):
-    self.port = port
-    self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    self.socket.bind(('0.0.0.0', self.port))
+class SnakeServer(snake_pb2_grpc.SnakeServerServicer):
+  def __init__(self, show_ui=False):
     self.nextPlayer = 0
     self.lock = Lock()
+    self.sig_to_id = {}
     self.connections = {}
     self.terminated = set()
     self.show_ui = show_ui
     self.game = Game(SCREEN_WIDTH, SCREEN_HEIGHT, self)
+    self.events_awaiting = {}
+
+  def JoinGame(self, request, context):
+    return self._handle_conn(request)
+
+  def KeyPress(self, request, context):
+    player_id = self.sig_to_id.get(request.signature)
+    if player_id is not None and player_id not in self.terminated:
+      key = request.key
+      if key == SIGTERM:
+        _log.debug('Received TERM signal from player %d (voluntary termination)', player_id)
+        _log.debug('Player %d left the game', player_id)
+        player = [player for player in self.game.players if player.id == player_id][0]
+        return self.game.kill_player(player)
+      else:
+        _log.debug('Player %d pressed %s', player_id, keycode2text(key))
+        return self.game.keypressed(player_id, key)
+    else:
+      return snake_pb2.Events()
+
+  def Poll(self, request, context):
+    player_id = self.sig_to_id[request.signature]
+    res = snake_pb2.Events()
+    events = list(self.events_awaiting[player_id])
+    for e in events:
+      self.events_awaiting[player_id].remove(e)
+    evts_proto = [wrap_event(evt) for evt in events]
+    res.events.extend(evts_proto)
+    return res
 
   def _handle_conn(self, conn):
     # Initialize new player
@@ -55,85 +84,88 @@ class SnakeServer:
       player_id = self.nextPlayer
       self.nextPlayer += 1
 
+    signature = hashlib.sha1(str(player_id)).hexdigest()
+    self.sig_to_id[signature] = player_id
+    self.events_awaiting[player_id] = []
+
     _log.debug('Accepted connection for new player: %d' % player_id)
 
     player = ServerPlayer(player_id, self.game)
     self.game.players.append(player)
-    self.connections[player_id] = conn
 
-    self.send_events([PlayerJoinedEvent(player_id, player.snake_head, player.snake_body, player.direction, player.score)],
+    self.send_events([snake_pb2.PlayerJoinedEvent(player_id=player_id, player_pos=to_proto_pos(player.snake_head),
+                                                  player_body=to_proto_pos(player.snake_body), direction=player.direction,
+                                                  score=player.score, my_join=False)],
                      [player.id for player in self.game.players if player.id != player_id])
 
-    evts_for_new_player = [PlayerJoinedEvent(player_id, player.snake_head, player.snake_body, player.direction, player.score, my_join=True),
-                           FoodPositionChangeEvent(self.game.food_pos)] + \
-                      [PlayerJoinedEvent(player.id, player.snake_head, player.snake_body, player.direction, player.score) \
-                       for player in self.game.players if player.id != player_id]
-    self.send_events(evts_for_new_player, [player_id])
-
-    # This thread only reads from the socket. The gameloop thread writes updates to all sockets
-    while player_id not in self.terminated:
-      try:
-        data = conn.recv(4)
-        key, = struct.unpack('!I', data)
-        if key == SIGTERM:
-          _log.debug('Received TERM signal from player %d (voluntary termination)', player_id)
-          raise Exception()
-        _log.debug('Player %d pressed %s', player_id, keycode2text(key))
-        self.game.keypressed(player_id, key)
-      except Exception as e:
-        # Dropped connection
-        _log.debug('Player %d left the game', player_id)
-        try:
-          self.game.players.remove(player)
-          self.send_events([PlayerTerminatedEvent(player_id)])
-        except:
-          pass
-        break
+    evts_for_new_player = [snake_pb2.PlayerJoinedEvent(player_id=player_id, player_pos=to_proto_pos(player.snake_head),
+                                                  player_body=to_proto_pos(player.snake_body), direction=player.direction,
+                                                  score=player.score, my_join=True),
+                           snake_pb2.FoodPositionChangeEvent(food_pos=to_proto_pos(self.game.food_pos))] + \
+                        [snake_pb2.PlayerJoinedEvent(player_id=p.id, player_pos=to_proto_pos(p.snake_head),
+                                                    player_body=to_proto_pos(p.snake_body), direction=p.direction,
+                                                    score=p.score, my_join=False)
+                         for p in self.game.players if p.id != player_id]
+    res = snake_pb2.Events(signature=signature)
+    res.events.extend([wrap_event(evt) for evt in evts_for_new_player])
+    return res
 
   def send_events(self, events, player_ids=None):
     if player_ids is None:
       player_ids = [player.id for player in self.game.players]
-    update = cPickle.dumps(events, cPickle.HIGHEST_PROTOCOL)
-    length = len(update)
-    data = struct.pack('!H', length) + update
-    for pid in player_ids:
-      conn = self.connections[pid]
-      conn.send(data)
+    elif len(player_ids) == 0:
+      return
 
-  def run(self):
-    self.socket.listen(5)
-    _log.debug('Server is running on port %d' % self.port)
-    while True:
-      try:
-        conn, _ = self.socket.accept()
-        t = Thread(target=self._handle_conn, kwargs={'conn': conn})
-        t.setDaemon(True)
-        t.start()
-      except:
-        break
-    _log.debug('Server is stopped.')
+    _log.debug('Sending %d events to %d players' % (len(events), len(player_ids)))
+
+    for player_id in player_ids:
+      self.events_awaiting[player_id].extend(events)
 
   def start(self):
-    self.thread = Thread(target=self.run)
-    self.thread.setDaemon(True)
-    self.thread.start()
+    server = grpc.server(concurrent.futures.ThreadPoolExecutor(max_workers=10))
+    snake_pb2_grpc.add_SnakeServerServicer_to_server(self, server)
+    server.add_insecure_port('[::]:%d' % SERVER_PORT)
+    server.start()
     self.game.start()
 
-  def join(self):
-    self.thread.join()
-
   def stop(self):
-    for pid in self.connections:
-      try:
-        self.connections[pid].close()
-      except:
-        pass
-    try:
-      self.socket.shutdown(socket.SHUT_RDWR)
-      self.socket.close()
-    except:
-      pass
-    _log.debug('Closed all sockets')
+    _log.debug('Server is stopped.')
+    pass
+
+  # def run(self):
+  #   self.socket.listen(5)
+  #   _log.debug('Server is running on port %d' % self.port)
+  #   while True:
+  #     try:
+  #       conn, _ = self.socket.accept()
+  #       t = Thread(target=self._handle_conn, kwargs={'conn': conn})
+  #       t.setDaemon(True)
+  #       t.start()
+  #     except:
+  #       break
+  #   _log.debug('Server is stopped.')
+
+  # def start(self):
+  #   self.thread = Thread(target=self.run)
+  #   self.thread.setDaemon(True)
+  #   self.thread.start()
+  #   self.game.start()
+
+  # def join(self):
+  #   self.thread.join()
+
+  # def stop(self):
+  #   for pid in self.connections:
+  #     try:
+  #       self.connections[pid].close()
+  #     except:
+  #       pass
+  #   try:
+  #     self.socket.shutdown(socket.SHUT_RDWR)
+  #     self.socket.close()
+  #   except:
+  #     pass
+  #   _log.debug('Closed all sockets')
 
 
 class ServerPlayer(Player):
@@ -162,7 +194,7 @@ class Game:
     self.width, self.height = width, height
     self.food_pos = [(random.randint(50, self.width - 50) // POINT_SIZE) * POINT_SIZE,
                     (random.randint(50, self.height - 50) // POINT_SIZE) * POINT_SIZE]
-    self.foodSpawn = True
+    self.food_ready = True
     self.players = []
     self.active = True
     self.server = server
@@ -177,12 +209,22 @@ class Game:
     player = self.players[player_id]
     direction = player.key(key)
     if direction is not None:
-      self.server.send_events([PlayerDirectionChangeEvent(player_id, direction), PlayerDimensionsEvent(player_id, player.snake_head, player.snake_body)])
+      evts = [snake_pb2.PlayerDirectionChangeEvent(player_id=player_id, direction=direction),
+             snake_pb2.PlayerDimensionsEvent(player_id=player_id,
+                                             player_pos=to_proto_pos(player.snake_head),
+                                             player_body=to_proto_pos(player.snake_body))]
+      self.server.send_events(evts, [player.id for player in self.players if player.id != player_id])
+      res = snake_pb2.Events()
+      res.events.extend([wrap_event(e) for e in evts])
+      return res
 
   def kill_player(self, player):
-    evt = PlayerTerminatedEvent(player.id)
-    self.server.send_events([evt], [p.id for p in self.players])
+    evt = snake_pb2.PlayerTerminatedEvent(player_id=player.id)
+    self.server.send_events([evt], [p.id for p in self.players if p.id != player.id])
     self.players.remove(player)
+    res = snake_pb2.Events()
+    res.events.extend([wrap_event(evt)])
+    return res
 
   def die(self):
     self.active = False
@@ -238,20 +280,22 @@ class Game:
           _log.error('Invalid snake direction: %s' % (keycode2text(player.direction) if player.direction is not None else 'None'))
 
         player.snake_body.insert(0, list(player.snake_head))
-        if player.snake_head == self.food_pos:
+        if self.food_ready and player.snake_head == self.food_pos:
           _log.debug('Player %d ate the food!' % player.id)
-          self.foodSpawn = False
+          self.food_ready = False
           player.score += 1
           _log.debug('Player %d score: %d' % (player.id, player.score))
           should_pop = False
-          events.append(PlayerDimensionsEvent(player.id, player.snake_head, player.snake_body))
-          events.append(PlayerScoreChangeEvent(player.id, player.score))
+          events.append(snake_pb2.PlayerDimensionsEvent(player_id=player.id,
+                                                        player_pos=to_proto_pos(player.snake_head),
+                                                        player_body=to_proto_pos(player.snake_body)))
+          events.append(snake_pb2.PlayerScoreChangeEvent(player_id=player.id, score=player.score))
 
-        if self.foodSpawn == False:
+        if not self.food_ready:
           self.food_pos = [(random.randint(50, self.width - 50) // POINT_SIZE) * POINT_SIZE,
                     (random.randint(50, self.height - 50) // POINT_SIZE) * POINT_SIZE]
-          self.foodSpawn = True
-          events.append(FoodPositionChangeEvent(self.food_pos))
+          self.food_ready = True
+          events.append(snake_pb2.FoodPositionChangeEvent(food_pos=to_proto_pos(self.food_pos)))
 
         # Other-player hit
         for otherplayer in self.players:
@@ -268,14 +312,19 @@ class Game:
               should_pop = False
               if otherplayer.score < 0:
                 self.kill_player(otherplayer)
-                events.append(PlayerTerminatedEvent(otherplayer.id))
+                events.append(snake_pb2.PlayerTerminatedEvent(player_id=otherplayer.id))
               else:
                 otherplayer.reset()
-                events.append(PlayerScoreChangeEvent(otherplayer.id, otherplayer.score))
-                events.append(PlayerDimensionsEvent(otherplayer.id, otherplayer.snake_head, otherplayer.snake_body))
-                events.append(PlayerDirectionChangeEvent(otherplayer.id, otherplayer.direction))
-              events.append(PlayerDimensionsEvent(player.id, player.snake_head, player.snake_body))
-              events.append(PlayerScoreChangeEvent(player.id, player.score))
+                events.append(snake_pb2.PlayerScoreChangeEvent(player_id=otherplayer.id, score=otherplayer.score))
+                events.append(snake_pb2.PlayerDimensionsEvent(player_id=otherplayer.id,
+                                                              player_pos=to_proto_pos(otherplayer.snake_head),
+                                                              player_body=to_proto_pos(otherplayer.snake_body)))
+                events.append(snake_pb2.PlayerDirectionChangeEvent(player_id=otherplayer.id,
+                                                                   direction=otherplayer.direction))
+              events.append(snake_pb2.PlayerDimensionsEvent(player_id=player.id,
+                                                            player_pos=to_proto_pos(player.snake_head),
+                                                            player_body=to_proto_pos(player.snake_body)))
+              events.append(snake_pb2.PlayerScoreChangeEvent(player_id=player.id, score=player.score))
 
         if should_pop:
           player.snake_body.pop()
@@ -288,12 +337,14 @@ class Game:
           _log.debug('Player %d score: %d' % (player.id, player.score))
           if player.score < 0:
             self.kill_player(player)
-            events.append(PlayerTerminatedEvent(player.id))
+            events.append(snake_pb2.PlayerTerminatedEvent(player_id=player.id))
           else:
             player.reset()
-            events.append(PlayerScoreChangeEvent(player.id, player.score))
-            events.append(PlayerDimensionsEvent(player.id, player.snake_head, player.snake_body))
-            events.append(PlayerDirectionChangeEvent(player.id, player.direction))
+            events.append(snake_pb2.PlayerScoreChangeEvent(player_id=player.id, score=player.score))
+            events.append(snake_pb2.PlayerDimensionsEvent(player_id=player.id,
+                                                          player_pos=to_proto_pos(player.snake_head),
+                                                          player_body=to_proto_pos(player.snake_body)))
+            events.append(snake_pb2.PlayerDirectionChangeEvent(player_id=player.id, direction=player.direction))
 
         # Self hit
         for block in player.snake_body[1:]:
@@ -303,12 +354,14 @@ class Game:
             _log.debug('Player %d score: %d' % (player.id, player.score))
             if player.score < 0:
               self.kill_player(player)
-              events.append(PlayerTerminatedEvent(player.id))
+              events.append(snake_pb2.PlayerTerminatedEvent(player_id=player.id))
             else:
               player.reset()
-              events.append(PlayerScoreChangeEvent(player.id, player.score))
-              events.append(PlayerDimensionsEvent(player.id, player.snake_head, player.snake_body))
-              events.append(PlayerDirectionChangeEvent(player.id, player.direction))
+              events.append(snake_pb2.PlayerScoreChangeEvent(player_id=player.id, score=player.score))
+              events.append(snake_pb2.PlayerDimensionsEvent(player_id=player.id,
+                                                            player_pos=to_proto_pos(player.snake_head),
+                                                            player_body=to_proto_pos(player.snake_body)))
+              events.append(snake_pb2.PlayerDirectionChangeEvent(player_id=player.id, direction=player.direction))
 
         if self.server.show_ui:
           for player in self.players:

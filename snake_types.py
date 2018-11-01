@@ -20,13 +20,16 @@
 import pygame
 import logging
 import cPickle
+import snake_pb2
+import snake_pb2_grpc
+import grpc
 
-RIGHT = 0x010001
-LEFT = 0x010002
-UP = 0x010003
-DOWN = 0x010004
+RIGHT = snake_pb2.RIGHT
+LEFT = snake_pb2.LEFT
+UP = snake_pb2.UP
+DOWN = snake_pb2.DOWN
 
-SIGTERM = 0x099999
+SIGTERM = snake_pb2.QUIT
 
 KEY_TEXT = ['RIGHT', 'LEFT', 'UP', 'DOWN']
 
@@ -48,9 +51,63 @@ SERVER_PORT = 8080
 
 
 def keycode2text(kc):
-  if kc not in [RIGHT, LEFT, UP, DOWN]:
-    return 'UNKNOWN'
-  return KEY_TEXT[kc - 0x010000 - 1]
+  if kc == RIGHT:
+    return 'RIGHT'
+  if kc == LEFT:
+    return 'LEFT'
+  if kc == UP:
+    return 'UP'
+  if kc == DOWN:
+    return 'DOWN'
+  if kc == SIGTERM:
+    return 'TERMINATE'
+  return 'UNKNOWN'
+
+
+def to_proto_pos(pos):
+  if isinstance(pos[0], list):
+    return [to_proto_pos(p) for p in pos]
+  return snake_pb2.Pos(x=pos[0], y=pos[1])
+
+
+def from_proto_pos(pos):
+  if not isinstance(pos, snake_pb2.Pos):
+    return [from_proto_pos(p) for p in pos]
+  return [pos.x, pos.y]
+
+
+def wrap_event(proto_evt):
+  if isinstance(proto_evt, snake_pb2.KeyPressEvent):
+    return snake_pb2.Event(key_press=proto_evt)
+  if isinstance(proto_evt, snake_pb2.PlayerDirectionChangeEvent):
+    return snake_pb2.Event(player_direction_change=proto_evt)
+  if isinstance(proto_evt, snake_pb2.FoodPositionChangeEvent):
+    return snake_pb2.Event(food_position_change=proto_evt)
+  if isinstance(proto_evt, snake_pb2.PlayerScoreChangeEvent):
+    return snake_pb2.Event(player_score_change=proto_evt)
+  if isinstance(proto_evt, snake_pb2.PlayerDimensionsEvent):
+    return snake_pb2.Event(player_dimensions=proto_evt)
+  if isinstance(proto_evt, snake_pb2.PlayerJoinedEvent):
+    return snake_pb2.Event(player_joined=proto_evt)
+  if isinstance(proto_evt, snake_pb2.PlayerTerminatedEvent):
+    return snake_pb2.Event(player_terminated=proto_evt)
+
+
+def unwrap_event(evt):
+  if evt.HasField('key_press'):
+    return evt.key_press
+  if evt.HasField('player_direction_change'):
+    return evt.player_direction_change
+  if evt.HasField('food_position_change'):
+    return evt.food_position_change
+  if evt.HasField('player_score_change'):
+    return evt.player_score_change
+  if evt.HasField('player_dimensions'):
+    return evt.player_dimensions
+  if evt.HasField('player_joined'):
+    return evt.player_joined
+  if evt.HasField('player_terminated'):
+    return evt.player_terminated
 
 
 class Player(object):
@@ -86,7 +143,7 @@ class Player(object):
 
 # Events
 
-
+"""
 class Event(object):
   def __init__(self):
     pass
@@ -141,3 +198,4 @@ class PlayerTerminatedEvent(Event):
   def __init__(self, player_id):
     super(PlayerTerminatedEvent, self).__init__()
     self.player_id = player_id
+"""
