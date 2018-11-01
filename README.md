@@ -1,4 +1,4 @@
-Multiplayer Snake Game
+Multiplayer Snake Game - gRPC version
 ===
 
 This is a multiplayer snake game that works over a network. It uses pygame for graphical user interface, user
